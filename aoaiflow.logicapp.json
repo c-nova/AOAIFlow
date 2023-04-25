@@ -500,7 +500,7 @@
                     }
                 },
                 "method": "get",
-                "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://microsoftapc.sharepoint.com/teams/SpeechTeams'))}/tables/@{encodeURIComponent(encodeURIComponent('c6d75422-2ae0-487f-b793-3ad89105ac91'))}/items"
+                "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://<your_sharepoint_site_name>.sharepoint.com/<contents_place>'))}/tables/@{encodeURIComponent(encodeURIComponent('c6d75422-2ae0-487f-b793-3ad89105ac91'))}/items"
             }
         },
         "項目の作成": {
@@ -530,7 +530,7 @@
                     }
                 },
                 "method": "post",
-                "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://microsoftapc.sharepoint.com/teams/SpeechTeams'))}/tables/@{encodeURIComponent(encodeURIComponent('63b61472-bbdc-4548-9bbc-b5d2d7bf612c'))}/items"
+                "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://<your_sharepoint_site_name>.sharepoint.com/<contents_place>'))}/tables/@{encodeURIComponent(encodeURIComponent('63b61472-bbdc-4548-9bbc-b5d2d7bf612c'))}/items"
             }
         }
     },
