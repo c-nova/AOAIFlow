@@ -149,7 +149,7 @@ https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/app-from-sharepoi
 
 ![PowerApps 詳細ページ](https://techcommunity.microsoft.com/t5/image/serverpage/image-id/451993i62A53406B20F4A0D/image-dimensions/767x438?v=v2)
 
-##　Stay tuned for more exciting blog content as we explore various potential scenarios.
+## Stay tuned for more exciting blog content as we explore various potential scenarios.
 
 Effortlessly extract text from documents, audio, and video files to generate valuable insights.
 
