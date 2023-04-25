@@ -1,0 +1,538 @@
+{
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "$connections": {
+            "defaultValue": {},
+            "type": "Object"
+        }
+    },
+    "triggers": {
+        "新しいメールが届いたとき_(V3)": {
+            "splitOn": "@triggerBody()?['value']",
+            "metadata": {
+                "Id::AAMkADliYmI2Y2MyLTlmNDktNGQwZi1hYjhkLTM4MDc3YTE2OGMxYgAuAAAAAADQsx0-TB1YRLmiqkulqby7AQC63GwjaJzdTpIXTgCBpbwMAAADEshvAAA=": "QA"
+            },
+            "type": "ApiConnectionNotification",
+            "inputs": {
+                "fetch": {
+                    "method": "get",
+                    "pathTemplate": {
+                        "template": "/v3/Mail/OnNewEmail"
+                    },
+                    "queries": {
+                        "fetchOnlyWithAttachment": false,
+                        "folderPath": "Id::AAMkADliYmI2Y2MyLTlmNDktNGQwZi1hYjhkLTM4MDc3YTE2OGMxYgAuAAAAAADQsx0-TB1YRLmiqkulqby7AQC63GwjaJzdTpIXTgCBpbwMAAADEshvAAA=",
+                        "importance": "Any",
+                        "includeAttachments": false
+                    }
+                },
+                "host": {
+                    "connection": {
+                        "name": "@parameters('$connections')['office365']['connectionId']"
+                    }
+                },
+                "subscribe": {
+                    "body": {
+                        "NotificationUrl": "@{listCallbackUrl()}"
+                    },
+                    "method": "post",
+                    "pathTemplate": {
+                        "template": "/GraphMailSubscriptionPoke/$subscriptions"
+                    },
+                    "queries": {
+                        "fetchOnlyWithAttachment": false,
+                        "folderPath": "Id::AAMkADliYmI2Y2MyLTlmNDktNGQwZi1hYjhkLTM4MDc3YTE2OGMxYgAuAAAAAADQsx0-TB1YRLmiqkulqby7AQC63GwjaJzdTpIXTgCBpbwMAAADEshvAAA=",
+                        "importance": "Any"
+                    }
+                }
+            }
+        }
+    },
+    "actions": {
+        "Html_からテキスト": {
+            "runAfter": {},
+            "type": "ApiConnection",
+            "inputs": {
+                "body": "<p>@{triggerBody()?['body']}</p>",
+                "host": {
+                    "connection": {
+                        "name": "@parameters('$connections')['conversionservice']['connectionId']"
+                    }
+                },
+                "method": "post",
+                "path": "/html2text"
+            }
+        },
+        "OpenAIに適用": {
+            "foreach": "@body('複数の項目の取得')?['value']",
+            "actions": {
+                "For_each": {
+                    "foreach": "@body('JSON_の解析')?['choices']",
+                    "actions": {
+                        "変数の設定": {
+                            "runAfter": {},
+                            "type": "SetVariable",
+                            "inputs": {
+                                "name": "summary",
+                                "value": "@items('For_each')?['text']"
+                            }
+                        }
+                    },
+                    "runAfter": {
+                        "JSON_の解析": [
+                            "Succeeded"
+                        ]
+                    },
+                    "type": "Foreach"
+                },
+                "HTTP": {
+                    "runAfter": {
+                        "PromptPhaseの設定": [
+                            "Succeeded"
+                        ]
+                    },
+                    "type": "Http",
+                    "inputs": {
+                        "body": {
+                            "max_tokens": 2000,
+                            "prompt": "@variables('PromptPhase')",
+                            "temperature": 1
+                        },
+                        "headers": {
+                            "api-key": "<your_aoai_api_key>"
+                        },
+                        "method": "POST",
+                        "uri": "https://<your_aoai_endpoint>.openai.azure.com/openai/deployments/<your_gpt_model_name>/completions?api-version=2022-12-01"
+                    }
+                },
+                "JSON_の解析": {
+                    "runAfter": {
+                        "HTTP": [
+                            "Succeeded"
+                        ]
+                    },
+                    "type": "ParseJson",
+                    "inputs": {
+                        "content": "@body('HTTP')",
+                        "schema": {
+                            "properties": {
+                                "choices": {
+                                    "items": {
+                                        "properties": {
+                                            "finish_reason": {
+                                                "type": "string"
+                                            },
+                                            "index": {
+                                                "type": "integer"
+                                            },
+                                            "logprobs": {},
+                                            "text": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "required": [
+                                            "text",
+                                            "index",
+                                            "finish_reason",
+                                            "logprobs"
+                                        ],
+                                        "type": "object"
+                                    },
+                                    "type": "array"
+                                },
+                                "created": {
+                                    "type": "integer"
+                                },
+                                "id": {
+                                    "type": "string"
+                                },
+                                "model": {
+                                    "type": "string"
+                                },
+                                "object": {
+                                    "type": "string"
+                                },
+                                "usage": {
+                                    "properties": {
+                                        "completion_tokens": {
+                                            "type": "integer"
+                                        },
+                                        "prompt_tokens": {
+                                            "type": "integer"
+                                        },
+                                        "total_tokens": {
+                                            "type": "integer"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            },
+                            "type": "object"
+                        }
+                    }
+                },
+                "PromptPhaseの設定": {
+                    "runAfter": {
+                        "PromptQの設定": [
+                            "Succeeded"
+                        ]
+                    },
+                    "type": "SetVariable",
+                    "inputs": {
+                        "name": "PromptPhase",
+                        "value": "@{concat('次の文書から、', variables('PromptQ'), 'を教えてください：', body('Html_からテキスト'))}"
+                    }
+                },
+                "PromptQの設定": {
+                    "runAfter": {},
+                    "type": "SetVariable",
+                    "inputs": {
+                        "name": "PromptQ",
+                        "value": "@items('OpenAIに適用')?['Title']"
+                    }
+                },
+                "スイッチ": {
+                    "runAfter": {
+                        "For_each": [
+                            "Succeeded"
+                        ]
+                    },
+                    "cases": {
+                        "ケース": {
+                            "case": "solution",
+                            "actions": {
+                                "solutionpromptの設定": {
+                                    "runAfter": {},
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                        "name": "solutionprompt",
+                                        "value": "@variables('summary')"
+                                    }
+                                }
+                            }
+                        },
+                        "ケース_2": {
+                            "case": "sentiment",
+                            "actions": {
+                                "sentimentpromptの設定": {
+                                    "runAfter": {},
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                        "name": "sentimentprompt",
+                                        "value": "@variables('summary')"
+                                    }
+                                }
+                            }
+                        },
+                        "ケース_3": {
+                            "case": "outcome",
+                            "actions": {
+                                "outcomepromptの設定": {
+                                    "runAfter": {},
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                        "name": "outcomeprompt",
+                                        "value": "@variables('summary')"
+                                    }
+                                }
+                            }
+                        },
+                        "ケース_4": {
+                            "case": "reason",
+                            "actions": {
+                                "reasonpromptの設定": {
+                                    "runAfter": {},
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                        "name": "reasonprompt",
+                                        "value": "@variables('summary')"
+                                    }
+                                }
+                            }
+                        },
+                        "ケース_5": {
+                            "case": "summary",
+                            "actions": {
+                                "summarypromptの設定": {
+                                    "runAfter": {},
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                        "name": "summaryprompt",
+                                        "value": "@variables('summary')"
+                                    }
+                                }
+                            }
+                        },
+                        "ケース_6": {
+                            "case": "title",
+                            "actions": {
+                                "titlepromptの設定": {
+                                    "runAfter": {},
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                        "name": "titleprompt",
+                                        "value": "@variables('summary')"
+                                    }
+                                }
+                            }
+                        },
+                        "ケース_7": {
+                            "case": "customer",
+                            "actions": {
+                                "変数の設定_2": {
+                                    "runAfter": {},
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                        "name": "customerprompt",
+                                        "value": "@variables('summary')"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "actions": {}
+                    },
+                    "expression": "@items('OpenAIに適用')?['promptType']",
+                    "type": "Switch"
+                }
+            },
+            "runAfter": {
+                "PromptQを初期化": [
+                    "Succeeded"
+                ]
+            },
+            "type": "Foreach",
+            "runtimeConfiguration": {
+                "concurrency": {
+                    "repetitions": 1
+                }
+            }
+        },
+        "PromptPhaseを初期化": {
+            "runAfter": {
+                "reasonpromptを初期化": [
+                    "Succeeded"
+                ]
+            },
+            "type": "InitializeVariable",
+            "inputs": {
+                "variables": [
+                    {
+                        "name": "PromptPhase",
+                        "type": "string"
+                    }
+                ]
+            }
+        },
+        "PromptQを初期化": {
+            "runAfter": {
+                "Promptを初期化": [
+                    "Succeeded"
+                ]
+            },
+            "type": "InitializeVariable",
+            "inputs": {
+                "variables": [
+                    {
+                        "name": "PromptQ",
+                        "type": "string"
+                    }
+                ]
+            }
+        },
+        "Promptを初期化": {
+            "runAfter": {
+                "変数を初期化する": [
+                    "Succeeded"
+                ]
+            },
+            "type": "InitializeVariable",
+            "inputs": {
+                "variables": [
+                    {
+                        "name": "Prompt",
+                        "type": "string"
+                    }
+                ]
+            }
+        },
+        "outcomepromptを初期化": {
+            "runAfter": {
+                "PromptPhaseを初期化": [
+                    "Succeeded"
+                ]
+            },
+            "type": "InitializeVariable",
+            "inputs": {
+                "variables": [
+                    {
+                        "name": "outcomeprompt",
+                        "type": "string"
+                    }
+                ]
+            }
+        },
+        "reasonpromptを初期化": {
+            "runAfter": {
+                "summarypromptを初期化": [
+                    "Succeeded"
+                ]
+            },
+            "type": "InitializeVariable",
+            "inputs": {
+                "variables": [
+                    {
+                        "name": "reasonprompt",
+                        "type": "string"
+                    }
+                ]
+            }
+        },
+        "sentimentpromptを初期化": {
+            "runAfter": {
+                "outcomepromptを初期化": [
+                    "Succeeded"
+                ]
+            },
+            "type": "InitializeVariable",
+            "inputs": {
+                "variables": [
+                    {
+                        "name": "sentimentprompt",
+                        "type": "string"
+                    }
+                ]
+            }
+        },
+        "solutionpromptを初期化": {
+            "runAfter": {
+                "sentimentpromptを初期化": [
+                    "Succeeded"
+                ]
+            },
+            "type": "InitializeVariable",
+            "inputs": {
+                "variables": [
+                    {
+                        "name": "solutionprompt",
+                        "type": "string"
+                    }
+                ]
+            }
+        },
+        "summarypromptを初期化": {
+            "runAfter": {
+                "titlepromptを初期化": [
+                    "Succeeded"
+                ]
+            },
+            "type": "InitializeVariable",
+            "inputs": {
+                "variables": [
+                    {
+                        "name": "summaryprompt",
+                        "type": "string"
+                    }
+                ]
+            }
+        },
+        "summaryを初期化": {
+            "runAfter": {
+                "複数の項目の取得": [
+                    "Succeeded"
+                ]
+            },
+            "type": "InitializeVariable",
+            "inputs": {
+                "variables": [
+                    {
+                        "name": "summary",
+                        "type": "string"
+                    }
+                ]
+            }
+        },
+        "titlepromptを初期化": {
+            "runAfter": {
+                "summaryを初期化": [
+                    "Succeeded"
+                ]
+            },
+            "type": "InitializeVariable",
+            "inputs": {
+                "variables": [
+                    {
+                        "name": "titleprompt",
+                        "type": "string"
+                    }
+                ]
+            }
+        },
+        "変数を初期化する": {
+            "runAfter": {
+                "solutionpromptを初期化": [
+                    "Succeeded"
+                ]
+            },
+            "type": "InitializeVariable",
+            "inputs": {
+                "variables": [
+                    {
+                        "name": "customerprompt",
+                        "type": "string"
+                    }
+                ]
+            }
+        },
+        "複数の項目の取得": {
+            "runAfter": {
+                "Html_からテキスト": [
+                    "Succeeded"
+                ]
+            },
+            "type": "ApiConnection",
+            "inputs": {
+                "host": {
+                    "connection": {
+                        "name": "@parameters('$connections')['sharepointonline']['connectionId']"
+                    }
+                },
+                "method": "get",
+                "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://microsoftapc.sharepoint.com/teams/SpeechTeams'))}/tables/@{encodeURIComponent(encodeURIComponent('c6d75422-2ae0-487f-b793-3ad89105ac91'))}/items"
+            }
+        },
+        "項目の作成": {
+            "runAfter": {
+                "OpenAIに適用": [
+                    "Succeeded"
+                ]
+            },
+            "type": "ApiConnection",
+            "inputs": {
+                "body": {
+                    "OData__x304a__x5ba2__x69d8__x540d_": "@variables('customerprompt')",
+                    "OData__x5bfe__x5fdc__x72b6__x6cc1_": {
+                        "Value": "新規"
+                    },
+                    "Title": "@variables('titleprompt')",
+                    "originalText": "@body('Html_からテキスト')",
+                    "reason": "@variables('reasonprompt')",
+                    "result": "@variables('outcomeprompt')",
+                    "sentiment": "@variables('sentimentprompt')",
+                    "solution": "@variables('solutionprompt')",
+                    "summary": "@variables('summaryprompt')"
+                },
+                "host": {
+                    "connection": {
+                        "name": "@parameters('$connections')['sharepointonline']['connectionId']"
+                    }
+                },
+                "method": "post",
+                "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://microsoftapc.sharepoint.com/teams/SpeechTeams'))}/tables/@{encodeURIComponent(encodeURIComponent('63b61472-bbdc-4548-9bbc-b5d2d7bf612c'))}/items"
+            }
+        }
+    },
+    "outputs": {}
+}
